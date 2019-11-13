@@ -5,6 +5,11 @@
 #include <dlfcn.h>
 #include <dirent.h>
 #include <errno.h>
+#include <stdarg.h>
+#include <sys/stat.h>
+#include "lib.h"
+
+#define	MAXARGS	31
 
 int chdir(const char *path)
 {
@@ -111,7 +116,6 @@ FILE *fopen(const char *pathname, const char *mode)
 {
 	char *d_path;
 	d_path = getenv("DPATH");
-	
 	char realname[60];
 
 	realpath(pathname, realname);
@@ -132,31 +136,152 @@ FILE *fopen(const char *pathname, const char *mode)
 		return NULL;
 	}
 }
-/*
+
 int link(const char *oldpath, const char *newpath)
 {
 	char *d_path;
 	d_path = getenv("DPATH");
 	
+	char realname[60], realname2[60];
+	realpath(oldpath, realname);
+	realpath(newpath, realname2);
+
+	int (*old_link)(const char *oldpath, const char *newpath) = NULL;
+
+	if (strncmp(realname, d_path, strlen(d_path))!=0)
+	{
+		fprintf(stderr, "[sandbox] link: access to %s is not allowed\n", realname);
+		errno = EACCES;
+		return -1;		
+	}
+	else if (strncmp(realname2, d_path, strlen(d_path))!=0)
+	{
+		fprintf(stderr, "[sandbox] link: access to %s is not allowed\n", realname2);
+		errno = EACCES;
+		return -1;	
+	}
+	else
+	{
+		void *handle = dlopen("libc.so.6", RTLD_LAZY);
+		if(handle != NULL)
+			old_link = dlsym(handle, "link");
+		return old_link(oldpath, newpath);
+	}
+}
+
+int mkdir(const char *pathname, mode_t mode)
+{
+	char *d_path;
+	d_path = getenv("DPATH");
+	
 	char realname[60];
+
 	realpath(pathname, realname);
 
-	int (*old_creat)(const char *pathname, mode_t mode) = NULL;
+	int (*old_mkdir)(const char *pathname, mode_t mode) = NULL;
 
 	if (strncmp(realname, d_path, strlen(d_path))==0)
 	{
 		void *handle = dlopen("libc.so.6", RTLD_LAZY);
 		if(handle != NULL)
-			old_creat = dlsym(handle, "creat");
-		return old_creat(pathname, mode);
+			old_mkdir = dlsym(handle, "mkdir");
+		return old_mkdir(pathname, mode);
 	}
 	else
 	{
-		fprintf(stderr, "[sandbox] creat: access to %s is not allowed\n", realname);
+		fprintf(stderr, "[sandbox] mkdir: access to %s is not allowed\n", realname);
 		errno = EACCES;
 		return -1;
 	}
-}*/
+}
+
+int open(const char *path, int oflag, ...)
+{
+	va_list ap;
+	int argno = 0;
+	int mode = 0;
+	int var = 0;
+
+	va_start(ap, oflag);
+	while (var != 0 && argno<2)
+	{
+		if (argno==1)
+			var = 1;
+		mode = va_arg(ap, int);
+		argno++;
+	}
+	va_end(ap);
+
+	char *d_path;
+	d_path = getenv("DPATH");
+	
+	char realname[60];
+
+	realpath(path, realname);
+
+	int (*old_open)(const char *path, int oflag, ...) = NULL;
+
+	if (strncmp(realname, d_path, strlen(d_path))==0)
+	{
+		void *handle = dlopen("libc.so.6", RTLD_LAZY);
+		if(handle != NULL)
+			old_open = dlsym(handle, "open");
+		if (var == 0)
+			return old_open(path, oflag);
+		else
+			return old_open(path, oflag, mode);
+	}
+	else
+	{
+		fprintf(stderr, "[sandbox] open: access to %s is not allowed\n", realname);
+		errno = EACCES;
+		return -1;
+	}
+}
+
+int openat(int dirfd, const char *pathname, int flags, ...)
+{
+	va_list ap;
+	int argno = 0;
+	int mode = 0;
+	int var = 0;
+
+	va_start(ap, flags);
+	while (var != 0 && argno<2)
+	{
+		if (argno==1)
+			var = 1;
+		mode = va_arg(ap, int);
+		argno++;
+	}
+	va_end(ap);
+
+	char *d_path;
+	d_path = getenv("DPATH");
+	
+	char realname[60];
+
+	realpath(pathname, realname);
+
+	int (*old_openat)(int dirfd, const char *pathname, int flags, ...) = NULL;
+
+	if (strncmp(realname, d_path, strlen(d_path))==0)
+	{
+		void *handle = dlopen("libc.so.6", RTLD_LAZY);
+		if(handle != NULL)
+			old_openat = dlsym(handle, "openat");
+		if (var == 0)
+			return old_openat(dirfd, pathname, flags);
+		else
+			return old_openat(dirfd, pathname, flags, mode);
+	}
+	else
+	{
+		fprintf(stderr, "[sandbox] openat: access to %s is not allowed\n", realname);
+		errno = EACCES;
+		return -1;
+	}
+}
 
 DIR *opendir(const char *name)
 {
@@ -165,12 +290,7 @@ DIR *opendir(const char *name)
 	
 	char realname[60];
 
-	if (realpath(name, realname)!=NULL)
-	{
-		fprintf(stderr, "[sandox opendir: path %s does not exist]\n", name);
-		errno = ENOENT;
-		return NULL;
-	}
+	realpath(name, realname);
 
 	DIR* (*old_opendir)(const char *name) = NULL;
 
@@ -183,9 +303,235 @@ DIR *opendir(const char *name)
 	}
 	else
 	{
-		fprintf(stderr, "[sandbox] chdir: access to %s is not allowed\n", realname);
+		fprintf(stderr, "[sandbox] opendir: access to %s is not allowed\n", realname);
 		errno = EACCES;
 		return NULL;
+	}
+}
+
+ssize_t readlink(const char *pathname, char *buf, size_t bufsiz)
+{
+	char *d_path;
+	d_path = getenv("DPATH");
+	
+	char realname[60];
+
+	realpath(pathname, realname);
+
+	ssize_t (*old_readlink)(const char *pathname, char *buf, size_t bufsiz) = NULL;
+
+	if (strncmp(realname, d_path, strlen(d_path))==0)
+	{
+		void *handle = dlopen("libc.so.6", RTLD_LAZY);
+		if(handle != NULL)
+			old_readlink = dlsym(handle, "readlink");
+		return old_readlink(pathname, buf, bufsiz);
+	}
+	else
+	{
+		fprintf(stderr, "[sandbox] readlink: access to %s is not allowed\n", realname);
+		errno = EACCES;
+		return -1;
+	}
+}
+
+int remove ( const char * filename )
+{
+	char *d_path;
+	d_path = getenv("DPATH");
+	
+	char realname[60];
+
+	realpath(filename, realname);
+
+	ssize_t (*old_remove)(const char * filename) = NULL;
+
+	if (strncmp(realname, d_path, strlen(d_path))==0)
+	{
+		void *handle = dlopen("libc.so.6", RTLD_LAZY);
+		if(handle != NULL)
+			old_remove = dlsym(handle, "remove");
+		return old_remove(filename);
+	}
+	else
+	{
+		fprintf(stderr, "[sandbox] remove: access to %s is not allowed\n", realname);
+		errno = EACCES;
+		return -1;
+	}
+}
+
+int rename(const char *old, const char *new)
+{
+	char *d_path;
+	d_path = getenv("DPATH");
+	
+	char realname[60], realname2[60];
+	realpath(old, realname);
+	realpath(new, realname2);
+
+	int (*old_rename)(const char *old, const char *new) = NULL;
+
+	if (strncmp(realname, d_path, strlen(d_path))!=0)
+	{
+		fprintf(stderr, "[sandbox] rename: access to %s is not allowed\n", realname);
+		errno = EACCES;
+		return -1;		
+	}
+	else if (strncmp(realname2, d_path, strlen(d_path))!=0)
+	{
+		fprintf(stderr, "[sandbox] rename: access to %s is not allowed\n", realname2);
+		errno = EACCES;
+		return -1;	
+	}
+	else
+	{
+		void *handle = dlopen("libc.so.6", RTLD_LAZY);
+		if(handle != NULL)
+			old_rename = dlsym(handle, "rename");
+		return old_rename(old, new);
+	}
+}
+
+int rmdir(const char *path)
+{
+	char *d_path;
+	d_path = getenv("DPATH");
+	
+	char realname[60];
+
+	realpath(path, realname);
+
+	int (*old_rmdir)(const char *path) = NULL;
+
+	if (strncmp(realname, d_path, strlen(d_path))==0)
+	{
+		void *handle = dlopen("libc.so.6", RTLD_LAZY);
+		if(handle != NULL)
+			old_rmdir = dlsym(handle, "rmdir");
+		return old_rmdir(path);
+	}
+	else
+	{
+		fprintf(stderr, "[sandbox] rmdir: access to %s is not allowed\n", realname);
+		errno = EACCES;
+		return -1;
+	}
+}
+
+int stat(const char *pathname, struct stat *statbuf)
+{
+	char *d_path;
+	d_path = getenv("DPATH");
+	
+	char realname[60];
+
+	realpath(pathname, realname);
+
+	int (*old_stat)(const char *pathname, struct stat *statbuf) = NULL;
+
+	if (strncmp(realname, d_path, strlen(d_path))==0)
+	{
+		void *handle = dlopen("libc.so.6", RTLD_LAZY);
+		if(handle != NULL)
+			old_stat = dlsym(handle, "stat");
+		return old_stat(pathname, statbuf);
+	}
+	else
+	{
+		fprintf(stderr, "[sandbox] stat: access to %s is not allowed\n", realname);
+		errno = EACCES;
+		return -1;
+	}
+}
+
+int symlink(const char *target, const char *linkpath)
+{
+	char *d_path;
+	d_path = getenv("DPATH");
+	
+	char realname[60], realname2[60];
+	realpath(target, realname);
+	realpath(linkpath, realname2);
+
+	int (*old_symlink)(const char *target, const char *linkpath) = NULL;
+
+	if (strncmp(realname, d_path, strlen(d_path))!=0)
+	{
+		fprintf(stderr, "[sandbox] symlink: access to %s is not allowed\n", realname);
+		errno = EACCES;
+		return -1;		
+	}
+	else if (strncmp(realname2, d_path, strlen(d_path))!=0)
+	{
+		fprintf(stderr, "[sandbox] symlink: access to %s is not allowed\n", realname2);
+		errno = EACCES;
+		return -1;	
+	}
+	else
+	{
+		void *handle = dlopen("libc.so.6", RTLD_LAZY);
+		if(handle != NULL)
+			old_symlink = dlsym(handle, "symlink");
+		return old_symlink(target, linkpath);
+	}
+}
+
+int symlinkat(const char *oldpath, int newdirfd, const char *newpath)
+{
+	char *d_path;
+	d_path = getenv("DPATH");
+	
+	char realname[60], realname2[60];
+	realpath(oldpath, realname);
+	realpath(newpath, realname2);
+
+	int (*old_symlinkat)(const char *oldpath, int newdirfd, const char *newpath) = NULL;
+
+	if (strncmp(realname, d_path, strlen(d_path))!=0)
+	{
+		fprintf(stderr, "[sandbox] symlinkat: access to %s is not allowed\n", realname);
+		errno = EACCES;
+		return -1;		
+	}
+	else if (strncmp(realname2, d_path, strlen(d_path))!=0)
+	{
+		fprintf(stderr, "[sandbox] symlinkat: access to %s is not allowed\n", realname2);
+		errno = EACCES;
+		return -1;	
+	}
+	else
+	{
+		void *handle = dlopen("libc.so.6", RTLD_LAZY);
+		if(handle != NULL)
+			old_symlinkat = dlsym(handle, "symlinkat");
+		return old_symlinkat(oldpath, newdirfd, newpath);
+	}
+}
+
+int unlink(const char *pathname)
+{
+	char *d_path;
+	d_path = getenv("DPATH");
+	
+	char realname[60];
+
+	realpath(pathname, realname);
+
+	int (*old_unlink)(const char *pathname) = NULL;
+
+	if (strncmp(realname, d_path, strlen(d_path))==0)
+	{
+		void *handle = dlopen("libc.so.6", RTLD_LAZY);
+		if(handle != NULL)
+			old_unlink = dlsym(handle, "unlink");
+		return old_unlink(pathname);
+	}
+	else
+	{
+		fprintf(stderr, "[sandbox] unlink: access to %s is not allowed\n", realname);
+		errno = EACCES;
+		return -1;
 	}
 }
 

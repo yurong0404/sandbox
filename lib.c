@@ -123,3 +123,32 @@ int commname(int argc, char *argv[], char *comm)
 	return -1;
 }
 
+
+/*
+	return 0, if successful
+	return -1, if unsuccessful
+*/
+/*int strsplit(char *str, char del)*/
+/*{*/
+/*	int i=0;*/
+/*	char str2[60];*/
+/*	int lastidx = -1;*/
+/*	while(str[i]!='\0')*/
+/*	{*/
+/*		if (str[i]==del)*/
+/*			lastidx = i;*/
+/*		i++;*/
+/*	}*/
+
+/*	if (lastidx == -1)*/
+/*		return -1;*/
+/*	for(int x=0; x<=lastidx; x++)*/
+/*	{*/
+/*		str2[x] = str[x];*/
+/*		str2[x+1] = '\0';*/
+/*	}*/
+
+/*	strcpy(str,str2);*/
+/*	return 0;*/
+/*}*/
+
