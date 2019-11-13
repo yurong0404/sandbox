@@ -89,6 +89,7 @@ int creat(const char *pathname, mode_t mode)
 	char realname[60];
 	realpath(pathname, realname);
 
+
 	int (*old_creat)(const char *pathname, mode_t mode) = NULL;
 
 	if (strncmp(realname, d_path, strlen(d_path))==0)
@@ -112,6 +113,7 @@ FILE *fopen(const char *pathname, const char *mode)
 	d_path = getenv("DPATH");
 	
 	char realname[60];
+
 	realpath(pathname, realname);
 
 	FILE* (*old_fopen)(const char *pathname, const char *mode) = NULL;
@@ -130,6 +132,31 @@ FILE *fopen(const char *pathname, const char *mode)
 		return NULL;
 	}
 }
+/*
+int link(const char *oldpath, const char *newpath)
+{
+	char *d_path;
+	d_path = getenv("DPATH");
+	
+	char realname[60];
+	realpath(pathname, realname);
+
+	int (*old_creat)(const char *pathname, mode_t mode) = NULL;
+
+	if (strncmp(realname, d_path, strlen(d_path))==0)
+	{
+		void *handle = dlopen("libc.so.6", RTLD_LAZY);
+		if(handle != NULL)
+			old_creat = dlsym(handle, "creat");
+		return old_creat(pathname, mode);
+	}
+	else
+	{
+		fprintf(stderr, "[sandbox] creat: access to %s is not allowed\n", realname);
+		errno = EACCES;
+		return -1;
+	}
+}*/
 
 DIR *opendir(const char *name)
 {
@@ -137,7 +164,13 @@ DIR *opendir(const char *name)
 	d_path = getenv("DPATH");
 	
 	char realname[60];
-	realpath(name, realname);
+
+	if (realpath(name, realname)!=NULL)
+	{
+		fprintf(stderr, "[sandox opendir: path %s does not exist]\n", name);
+		errno = ENOENT;
+		return NULL;
+	}
 
 	DIR* (*old_opendir)(const char *name) = NULL;
 
