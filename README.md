@@ -20,3 +20,33 @@ After executing "make" command, 2 files will show up.
 ```C
 system("LD_PRELOAD=./sandbox.so cmd arg1 arg2");
 ```
+## Example
+```console
+$ ./sandbox -h
+./sandbox: invalid option -- 'h'
+Usage: ./sandbox [-p sopath] [-d basedir] [--] cmd [cmd args ...]
+	-p: set the path to sandbox.so, default = ./sandbox.so
+	-d: restrict directory, default = .
+	--: seperate the arguments for sandbox and for the executed command
+
+$ ./sandbox ls
+lib.c  lib.h  main.c  makefile	README.md  sandbox  sandbox.c  sandbox.so
+
+# use "--" flag to split the argumemt between sandbox and 'ls'
+$ ./sandbox -- ls /
+[sandbox] opendir: access to / is not allowed
+ls: cannot open directory '/': Permission denied
+
+$ ./sandbox -d / -- ls /
+bin    dev   initrd.img      lib32	 media	proc  sbin  sys  var
+boot   etc   initrd.img.old  lib64	 mnt	root  snap  tmp  vmlinuz
+cdrom  home  lib	     lost+found  opt	run   srv   usr  vmlinuz.old
+
+$ ./sandbox -- sh -c 'ls'
+[sandbox] execve(/bin/ls): not allowed
+[sandbox] execve(/usr/games/ls): not allowed
+[sandbox] execve(/usr/local/games/ls): not allowed
+[sandbox] execve(/snap/bin/ls): not allowed
+[sandbox] execve(/usr/local/cuda-8.0/bin//ls): not allowed
+sh: 1: ls: Permission denied
+```
