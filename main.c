@@ -45,7 +45,6 @@ int main(int argc, char *argv[])
 		strcat(comm, " ");
 		strcat(comm, commarg[i]);
 	}
-	//printf("%s\n", comm);
 
 	system(comm);
 

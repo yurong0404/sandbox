@@ -7,7 +7,6 @@
 #include <errno.h>
 #include <stdarg.h>
 #include <sys/stat.h>
-#include "lib.h"
 
 #define	MAXARGS	31
 
@@ -36,6 +35,7 @@ int chdir(const char *path)
 	}
 }
 
+//V
 int chmod(const char *pathname, mode_t mode)
 {
 	char *d_path;
@@ -55,7 +55,7 @@ int chmod(const char *pathname, mode_t mode)
 	}
 	else
 	{
-		fprintf(stderr, "[sandbox] chmod: access to %s is not allowed", pathname);
+		fprintf(stderr, "[sandbox] chmod: access to %s is not allowed\n", pathname);
 		errno = EACCES;
 		return -1;
 	}
@@ -195,6 +195,7 @@ int mkdir(const char *pathname, mode_t mode)
 	}
 }
 
+//V
 int open(const char *path, int oflag, ...)
 {
 	va_list ap;
@@ -239,6 +240,7 @@ int open(const char *path, int oflag, ...)
 	}
 }
 
+//V
 int openat(int dirfd, const char *pathname, int flags, ...)
 {
 	va_list ap;
@@ -283,6 +285,7 @@ int openat(int dirfd, const char *pathname, int flags, ...)
 	}
 }
 
+// V
 DIR *opendir(const char *name)
 {
 	char *d_path;
@@ -309,6 +312,7 @@ DIR *opendir(const char *name)
 	}
 }
 
+//V
 ssize_t readlink(const char *pathname, char *buf, size_t bufsiz)
 {
 	char *d_path;
@@ -361,6 +365,7 @@ int remove ( const char * filename )
 	}
 }
 
+//V
 int rename(const char *old, const char *new)
 {
 	char *d_path;
@@ -393,6 +398,7 @@ int rename(const char *old, const char *new)
 	}
 }
 
+//V
 int rmdir(const char *path)
 {
 	char *d_path;
@@ -445,6 +451,7 @@ int stat(const char *pathname, struct stat *statbuf)
 	}
 }
 
+//V
 int symlink(const char *target, const char *linkpath)
 {
 	char *d_path;
@@ -509,6 +516,7 @@ int symlinkat(const char *oldpath, int newdirfd, const char *newpath)
 	}
 }
 
+//V
 int unlink(const char *pathname)
 {
 	char *d_path;
@@ -530,6 +538,33 @@ int unlink(const char *pathname)
 	else
 	{
 		fprintf(stderr, "[sandbox] unlink: access to %s is not allowed\n", realname);
+		errno = EACCES;
+		return -1;
+	}
+}
+
+//V
+int unlinkat(int dirfd, const char *pathname, int flags)
+{
+	char *d_path;
+	d_path = getenv("DPATH");
+	
+	char realname[60];
+
+	realpath(pathname, realname);
+
+	int (*old_unlinkat)(int dirfd, const char *pathname, int flags) = NULL;
+
+	if (strncmp(realname, d_path, strlen(d_path))==0)
+	{
+		void *handle = dlopen("libc.so.6", RTLD_LAZY);
+		if(handle != NULL)
+			old_unlinkat = dlsym(handle, "unlinkat");
+		return old_unlinkat(dirfd, pathname, flags);
+	}
+	else
+	{
+		fprintf(stderr, "[sandbox] unlinkat: access to %s is not allowed\n", realname);
 		errno = EACCES;
 		return -1;
 	}
